@@ -70,3 +70,9 @@ swiftmailer:
     username:  "%mailer_user%"
     password:  "%mailer_password%"
     spool:     { type: memory }
+
+acme_demo:
+    static:
+        foo: 'hello {{ include("bar") }}'
+        bar: 'world'
+    directory: %kernel.root_dir%/../templates
