@@ -17,15 +17,13 @@ class HelloCommand extends Command
     {
         $this
             ->setName('hello')
-            ->addArgument('username', InputArgument::OPTIONAL, 'Who do you want to say hello?')
+            ->addArgument('username', InputArgument::OPTIONAL, 'Who do you want to say hello?', 'world')
         ;
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $username = $input->getArgument('username') ?: 'world';
-
-        $output->writeln(sprintf('Hello %s!', $username));
+        $output->writeln(sprintf('Hello %s!', $input->getArgument('username')));
     }
 }
 
