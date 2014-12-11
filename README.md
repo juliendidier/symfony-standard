@@ -139,13 +139,13 @@ class HelloCommand extends Command
     {
         $this
             ->setName('hello')
-            ->addArgument('username', InputArgument::OPTIONAL, 'Who do you want to say hello?')
+            ->addArgument('username', InputArgument::OPTIONAL, 'Who do you want to say hello?', 'world')
         ;
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $username = $input->getArgument('username') ?: 'world';
+        $username = $input->getArgument('username');
 
         $output->writeln(sprintf('Hello %s!', $username));
     }
@@ -167,13 +167,11 @@ $application->run();
 
 ### Énoncé
 
-Je veux pouvoir executer une commande nommée ``hello``, qui m'affiche ``Hello world!`` dans l'output.
-Je dois pouvoir indiquer un nom dans la commande. Si tel est le cas, je veux afficher ``Hello <username>!``.
-Je doit indiquer la langue dans laquelle j'affiche le message :
+Je veux pouvoir executer une commande nommée ``hello``, avec plusieurs noms, et afficher ``Hello <username>!`` pour chacun.
+Je dois indiquer globalement la langue dans laquelle j'affiche les messages :
  - en anglais (en) par défaut : ``Hello <username>!``
  - en français (fr) : ``Bonjour <username> !``
  - en espagnol (es) : ``¡ Hola <username> !``
-
 
 ### Réponse
 
@@ -186,10 +184,13 @@ Je doit indiquer la langue dans laquelle j'affiche le message :
 
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\ConsoleEvents;
+use Symfony\Component\Console\Event\ConsoleExceptionEvent;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 
 require_once __DIR__.'/vendor/autoload.php';
 
@@ -199,7 +200,7 @@ class HelloCommand extends Command
     {
         $this
             ->setName('hello')
-            ->addArgument('username', InputArgument::OPTIONAL, 'Who do you want to say hello?', 'world')
+            ->addArgument('username', InputArgument::IS_ARRAY, 'Who do you want to say hello?')
             ->addOption('lang', null, InputOption::VALUE_REQUIRED, 'What language would you want to say hello?', 'en')
         ;
     }
@@ -212,10 +213,17 @@ class HelloCommand extends Command
             'es' => '¡ Hola %s !',
         ];
 
-        $pattern = $patterns[$input->getOption('lang')];
-        $username = $input->getArgument('username');
+        $lang = $input->getOption('lang');
 
-        $output->writeln(sprintf($pattern, $username));
+        if (false === array_key_exists($lang, $patterns)) {
+            throw new \LogicException(sprintf('"%s" is not defined, available languages: "%s"', $lang, implode('", "', array_keys($patterns))));
+        }
+
+        $pattern = $patterns[$input->getOption('lang')];
+
+        foreach ($input->getArgument('username') as $username) {
+            $output->writeln(sprintf($pattern, $username));
+        }
     }
 }
 
@@ -226,8 +234,8 @@ $application->run();
 
 #### Interpréteur de commandes
 
-``php ./test.php hello`` affiche ``Hello world!``.
-
-``php ./test.php hello Bob`` affiche ``Hello Bob!``.
-
-``php ./test.php hello Bob --lang=fr`` affiche ``Bonjour Bob !``.
+``php ./test.php hello Foo Bar --lang=fr`` affiche :
+```
+Bonjour Foo !
+Bonjour Bar !
+```
