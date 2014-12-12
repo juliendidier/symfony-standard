@@ -14,6 +14,8 @@ use Symfony\Component\EventDispatcher\EventDispatcher;
 
 require_once __DIR__.'/vendor/autoload.php';
 
+class UnsupportedLanguageException extends \LogicException {}
+
 class HelloCommand extends Command
 {
     protected function configure()
@@ -25,18 +27,22 @@ class HelloCommand extends Command
         ;
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    public static function getAvailablePatterns()
     {
-        $patterns = [
+        return [
             'en' => 'Hello %s!',
             'fr' => 'Bonjour %s !',
             'es' => '¡ Hola %s !',
         ];
+    }
 
+    protected function execute(InputInterface $input, OutputInterface $output)
+    {
         $lang = $input->getOption('lang');
+        $patterns = self::getAvailablePatterns();
 
         if (false === array_key_exists($lang, $patterns)) {
-            throw new \LogicException(sprintf('"%s" is not defined, available languages: "%s"', $lang, implode('", "', array_keys($patterns))));
+            throw new UnsupportedLanguageException(sprintf('Language "%s" is not supported', $lang));
         }
 
         $pattern = $patterns[$input->getOption('lang')];
@@ -47,6 +53,30 @@ class HelloCommand extends Command
     }
 }
 
+$dispatcher = new EventDispatcher();
+$dispatcher->addListener(ConsoleEvents::EXCEPTION, function (ConsoleExceptionEvent $event) {
+    $output = $event->getOutput();
+    $exception = $event->getException();
+
+    if (false === $output->isVeryVerbose()) {
+        return;
+    }
+
+    if (!$exception instanceof UnsupportedLanguageException) {
+        return;
+    }
+
+    $command = $event->getCommand();
+    $message = sprintf('%s (supported languages: "%s")',
+        $exception->getMessage(),
+        implode('", "', array_keys($command::getAvailablePatterns()))
+    );
+
+    $e = new UnsupportedLanguageException($message);
+    $event->setException($e);
+});
+
 $application = new Application();
 $application->add(new HelloCommand());
+$application->setDispatcher($dispatcher);
 $application->run();

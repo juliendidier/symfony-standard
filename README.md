@@ -214,11 +214,6 @@ class HelloCommand extends Command
         ];
 
         $lang = $input->getOption('lang');
-
-        if (false === array_key_exists($lang, $patterns)) {
-            throw new \LogicException(sprintf('"%s" is not defined, available languages: "%s"', $lang, implode('", "', array_keys($patterns))));
-        }
-
         $pattern = $patterns[$input->getOption('lang')];
 
         foreach ($input->getArgument('username') as $username) {
@@ -238,4 +233,146 @@ $application->run();
 ```
 Bonjour Foo !
 Bonjour Bar !
+```
+
+
+## Options globales
+
+Le composant commande offre plusieurs options d'exécution :
+
+ * ``--help`` (``-h``)
+   * sans commande, affiche l'aide générale les arguments et les options fournis par le composant
+   * précédé d'une commande, affiche l'aide sur la commande
+ * ``--quiet`` (``-q``) désactive la sortie de la commande (``Output::isQuiet()``)
+ * ``--verbose`` (``-v``) gère la verbosité du retour, si la commande le supporte. Il existe trois niveaux de verbosités :
+   * ``-v`` pour une sortie normale incluant la stacktrace (``Output::isVerbose()``)
+   * ``-vv`` pour une sortie plus parlante (``Output::isVeryVerbose()``)
+   * ``-vvv`` pour le développement (``Output::isDebug()``)
+ * ``--no-interaction`` (``-n``) pour ne pas afficher les questions interactives
+
+## Commandes globales
+
+ * ``list`` affiche la liste des commandes enregistrées dans l'application
+ * ``help <command>`` qui est un alias de l'option ``--help``
+
+
+## Evénements
+
+Le composant commande dispose de ses propres évènements.
+
+### Symfony\Component\Console\ConsoleEvents
+
+ * ``ConsoleEvents::COMMAND`` permettant de modifier la commande avant son exécution
+ * ``ConsoleEvents::TERMINATE`` appelé après l'exécution de la commande
+ * ``ConsoleEvents::EXCEPTION`` levé en cas d'exception durant le processus
+
+
+## Exercice 4
+
+### Enoncé
+
+Sur la base de l'exercice 3, quand la langue fourni n'est pas géré, un message d'erreur "Language not supported" doit être retourné en sortie.
+En verbosité de deuxième niveau, le message d'erreur doit indiquer les langues supportées.
+
+### Réponse
+
+#### Code
+
+```
+<?php
+
+# test.php
+
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\ConsoleEvents;
+use Symfony\Component\Console\Event\ConsoleExceptionEvent;
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\EventDispatcher\EventDispatcher;
+
+require_once __DIR__.'/vendor/autoload.php';
+
+class UnsupportedLanguageException extends \LogicException {}
+
+class HelloCommand extends Command
+{
+    protected function configure()
+    {
+        $this
+            ->setName('hello')
+            ->addArgument('username', InputArgument::IS_ARRAY, 'Who do you want to say hello?')
+            ->addOption('lang', null, InputOption::VALUE_REQUIRED, 'What language would you want to say hello?', 'en')
+        ;
+    }
+
+    public static function getAvailablePatterns()
+    {
+        return [
+            'en' => 'Hello %s!',
+            'fr' => 'Bonjour %s !',
+            'es' => '¡ Hola %s !',
+        ];
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output)
+    {
+        $lang = $input->getOption('lang');
+        $patterns = self::getAvailablePatterns();
+
+        if (false === array_key_exists($lang, $patterns)) {
+            throw new UnsupportedLanguageException(sprintf('Language "%s" is not supported', $lang));
+        }
+
+        $pattern = $patterns[$input->getOption('lang')];
+
+        foreach ($input->getArgument('username') as $username) {
+            $output->writeln(sprintf($pattern, $username));
+        }
+    }
+}
+
+$dispatcher = new EventDispatcher();
+$dispatcher->addListener(ConsoleEvents::EXCEPTION, function (ConsoleExceptionEvent $event) {
+    $output = $event->getOutput();
+    $exception = $event->getException();
+
+    if (false === $output->isVeryVerbose()) {
+        return;
+    }
+
+    if (!$exception instanceof UnsupportedLanguageException) {
+        return;
+    }
+
+    $command = $event->getCommand();
+    $message = sprintf('%s (supported languages: "%s")',
+        $exception->getMessage(),
+        implode('", "', array_keys($command::getAvailablePatterns()))
+    );
+
+    $e = new UnsupportedLanguageException($message);
+    $event->setException($e);
+});
+
+$application = new Application();
+$application->add(new HelloCommand());
+$application->setDispatcher($dispatcher);
+$application->run();
+```
+
+#### Interpréteur de commandes
+
+``php ./test.php hello Foo Bar --lang=de`` affiche :
+```
+[UnsupportedLanguageException]
+Language "de" is not supported
+```
+
+``php ./test.php hello Foo Bar --lang=de -vv`` affiche :
+```
+[UnsupportedLanguageException]
+Language "de" is not supported (supported languages: "en", "fr", "es")
 ```
